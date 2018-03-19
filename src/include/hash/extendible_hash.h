@@ -12,6 +12,7 @@
 #include <cstdlib>
 #include <vector>
 #include <string>
+#include <map>
 
 #include "hash/hash_table.h"
 
@@ -35,5 +36,22 @@ public:
 
 private:
   // add your own member variables here
+    class Bucket {
+    public:
+        Bucket(ExtendibleHash& extendible_hash) : local_depth_(0), extendible_hash_(extendible_hash) { }
+        bool IsFull() const;
+        void AddEntry(K key, V val);
+        const V& GetValue(K key) const;
+
+    private:
+        uint32_t local_depth_;
+        std::map<K, V> entries_;
+        ExtendibleHash& extendible_hash_;
+    };
+
+    typedef std::shared_ptr<Bucket> BucketPtr;
+    uint32_t gloable_depth_;
+    std::vector<BucketPtr> buckets_;
+    size_t bucket_size_;
 };
 } // namespace cmudb

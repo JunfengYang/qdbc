@@ -5,12 +5,30 @@
 
 namespace cmudb {
 
+template <typename K, typename V>
+bool ExtendibleHash<K, V>::Bucket::IsFull() const {
+    return entries_.size() >= extendible_hash_.bucket_size_;
+}
+
+template <typename K, typename V>
+void ExtendibleHash<K, V>::Bucket::AddEntry(K key, V val) {
+    entries_[key] = val;
+}
+
+template <typename K, typename V>
+const V& ExtendibleHash<K, V>::Bucket::GetValue(K key) const {
+    return entries_[key];
+}
+
 /*
  * constructor
  * array_size: fixed array size for each bucket
  */
 template <typename K, typename V>
-ExtendibleHash<K, V>::ExtendibleHash(size_t size) {}
+ExtendibleHash<K, V>::ExtendibleHash(size_t size) : bucket_size_(0), gloable_depth_(0){
+    BucketPtr bucket = std::make_shared<Bucket>(*this);
+    buckets_.push_back(bucket);
+}
 
 /*
  * helper function to calculate the hashing address of input key
