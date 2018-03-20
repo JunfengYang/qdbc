@@ -57,8 +57,7 @@ void ExtendibleHash<K, V>::Bucket::SetDepth(uint32_t new_depth) {
 template <typename K, typename V>
 ExtendibleHash<K, V>::ExtendibleHash(size_t size) :
     gloable_depth_(0), bucket_size_(size) {
-    std::shared_ptr<typename ExtendibleHash<K, V>::Bucket> bucket =
-        std::make_shared<typename ExtendibleHash<K, V>::Bucket>(*this);
+    auto bucket = std::make_shared<typename ExtendibleHash<K, V>::Bucket>(*this);
     buckets_.push_back(bucket);
 }
 
@@ -87,7 +86,8 @@ int ExtendibleHash<K, V>::GetGlobalDepth() const {
  */
 template <typename K, typename V>
 int ExtendibleHash<K, V>::GetLocalDepth(int bucket_id) const {
-    return buckets_[bucket_id]->GetDepth();
+    auto bucket_ptr = buckets_[bucket_id];
+    return bucket_ptr->GetDepth();
 }
 
 /*
@@ -95,35 +95,17 @@ int ExtendibleHash<K, V>::GetLocalDepth(int bucket_id) const {
  */
 template <typename K, typename V>
 int ExtendibleHash<K, V>::GetNumBuckets() const {
-  return buckets_.size();
-}
-
-/*
- * lookup function to find value associate with input key
- */
-template <typename K, typename V>
-bool ExtendibleHash<K, V>::Find(const K &key, V &value) {
-    std::unique_lock<std::mutex> find_latch;
-    std::shared_ptr<typename ExtendibleHash<K, V>::Bucket> bucket_ptr =
-        LockOperateBucket(&find_latch, key);
-    if (bucket_ptr->IsExists(key)) {
-        value = bucket_ptr->GetValue(key);
-        return true;
-    }
-    return false;
+    return buckets_.size();
 }
 
 template <typename K, typename V>
 std::shared_ptr<typename ExtendibleHash<K, V>::Bucket> ExtendibleHash<K, V>::
 LockOperateBucket(std::unique_lock<std::mutex>* bucket_latch, const K &key) {
-    std::shared_ptr<typename ExtendibleHash<K, V>::Bucket> bucket_ptr =
-        buckets_[HashKey(key)];
+    auto bucket_ptr = buckets_[HashKey(key)];
     while (true) {
-        *bucket_latch = std::unique_lock<std::mutex> (bucket_ptr->latch,
-                                                      std::defer_lock);
+        *bucket_latch = std::unique_lock<std::mutex> (bucket_ptr->latch, std::defer_lock);
         bucket_latch->lock();
-        std::shared_ptr<typename ExtendibleHash<K, V>::Bucket> new_bucket_ptr =
-            buckets_[HashKey(key)];
+        auto new_bucket_ptr = buckets_[HashKey(key)];
         if (bucket_ptr == new_bucket_ptr) {
             break;
         } else {
@@ -135,14 +117,27 @@ LockOperateBucket(std::unique_lock<std::mutex>* bucket_latch, const K &key) {
 }
 
 /*
+ * lookup function to find value associate with input key
+ */
+template <typename K, typename V>
+bool ExtendibleHash<K, V>::Find(const K &key, V &value) {
+    std::unique_lock<std::mutex> find_latch;
+    auto bucket_ptr = LockOperateBucket(&find_latch, key);
+    if (bucket_ptr->IsExists(key)) {
+        value = bucket_ptr->GetValue(key);
+        return true;
+    }
+    return false;
+}
+
+/*
  * delete <key,value> entry in hash table
  * Shrink & Combination is not required for this project
  */
 template <typename K, typename V>
 bool ExtendibleHash<K, V>::Remove(const K &key) {
     std::unique_lock<std::mutex> remove_latch;
-    std::shared_ptr<typename ExtendibleHash<K, V>::Bucket> bucket_ptr =
-        LockOperateBucket(&remove_latch, key);
+    auto bucket_ptr = LockOperateBucket(&remove_latch, key);
     if (bucket_ptr->IsExists(key)) {
         bucket_ptr->DeleteEntry(key);
         return true;
@@ -158,8 +153,7 @@ bool ExtendibleHash<K, V>::Remove(const K &key) {
 template <typename K, typename V>
 void ExtendibleHash<K, V>::Insert(const K &key, const V &value) {
     std::unique_lock<std::mutex> insert_latch;
-    std::shared_ptr<typename ExtendibleHash<K, V>::Bucket> bucket_ptr =
-        LockOperateBucket(&insert_latch, key);
+    auto bucket_ptr = LockOperateBucket(&insert_latch, key);
     if (bucket_ptr->IsFull()) {
         bucket_ptr = SplitBucket(bucket_ptr, key);
     }
@@ -185,10 +179,8 @@ SplitBucket(
     if (gloable_depth_ > bucket_ptr->GetDepth()) {
         std::lock_guard<std::mutex> split_lock(latch_);
         if (gloable_depth_ > bucket_ptr->GetDepth()) {
-            std::shared_ptr<typename ExtendibleHash<K, V>::Bucket> bucket1 =
-                std::make_shared<typename ExtendibleHash<K, V>::Bucket>(*this);
-            std::shared_ptr<typename ExtendibleHash<K, V>::Bucket> bucket2 =
-                std::make_shared<typename ExtendibleHash<K, V>::Bucket>(*this);
+            auto bucket1 = std::make_shared<typename ExtendibleHash<K, V>::Bucket>(*this);
+            auto bucket2 = std::make_shared<typename ExtendibleHash<K, V>::Bucket>(*this);
             std::map<K, V> entries = bucket_ptr->GetEntries();
             for (auto it = entries.begin(); it != entries.end(); it++) {
                 size_t current_bucket_id = HashKey(it->first);
@@ -212,8 +204,7 @@ SplitBucket(
         }
     }
     size_t bucket_id = HashKey(key);
-    std::shared_ptr<typename ExtendibleHash<K, V>::Bucket> bucket_to_add =
-        buckets_[bucket_id];
+    auto bucket_to_add = buckets_[bucket_id];
     if (bucket_to_add->IsFull()) {
         return SplitBucket(bucket_to_add, key);
     }

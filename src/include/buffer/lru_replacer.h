@@ -12,25 +12,33 @@
 #include "buffer/replacer.h"
 #include "hash/extendible_hash.h"
 
+#include <list>
+#include <mutex>
+
 namespace cmudb {
+
+static const int HASH_TABLE_BUCKET_SIZE = 2;
 
 template <typename T> class LRUReplacer : public Replacer<T> {
 public:
-  // do not change public interface
-  LRUReplacer();
+    // do not change public interface
+    LRUReplacer();
 
-  ~LRUReplacer();
+    ~LRUReplacer();
 
-  void Insert(const T &value);
+    void Insert(const T &value);
 
-  bool Victim(T &value);
+    bool Victim(T &value);
 
-  bool Erase(const T &value);
+    bool Erase(const T &value);
 
-  size_t Size();
+    size_t Size();
 
 private:
-  // add your member variables here
+    // add your member variables here
+    std::list<T> queue;
+    ExtendibleHash<T, typename std::list<T>::iterator> hash_table;
+    std::mutex latch;
 };
 
 } // namespace cmudb
