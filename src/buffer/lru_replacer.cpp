@@ -11,7 +11,7 @@
 namespace cmudb {
 
 template <typename T> LRUReplacer<T>::LRUReplacer() :
-        hash_table(HASH_TABLE_BUCKET_SIZE) {}
+        hash_table(BUCKET_SIZE) {}
 
 template <typename T> LRUReplacer<T>::~LRUReplacer() {
 }

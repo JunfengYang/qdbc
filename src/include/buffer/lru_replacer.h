@@ -17,8 +17,6 @@
 
 namespace cmudb {
 
-static const int HASH_TABLE_BUCKET_SIZE = 2;
-
 template <typename T> class LRUReplacer : public Replacer<T> {
 public:
     // do not change public interface
