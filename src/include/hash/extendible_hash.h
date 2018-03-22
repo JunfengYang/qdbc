@@ -63,6 +63,7 @@ private:
     uint32_t gloable_depth_;
     std::vector<std::shared_ptr<Bucket>> buckets_;
     size_t bucket_size_;
+    int bucket_number;
     std::mutex latch_;
 };
 

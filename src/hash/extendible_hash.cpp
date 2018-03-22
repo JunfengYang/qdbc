@@ -56,9 +56,10 @@ void ExtendibleHash<K, V>::Bucket::SetDepth(uint32_t new_depth) {
  */
 template <typename K, typename V>
 ExtendibleHash<K, V>::ExtendibleHash(size_t size) :
-    gloable_depth_(0), bucket_size_(size) {
+    gloable_depth_(0), bucket_size_(size), bucket_number(0) {
     auto bucket = std::make_shared<typename ExtendibleHash<K, V>::Bucket>(*this);
     buckets_.push_back(bucket);
+    bucket_number++;
 }
 
 /*
@@ -95,7 +96,7 @@ int ExtendibleHash<K, V>::GetLocalDepth(int bucket_id) const {
  */
 template <typename K, typename V>
 int ExtendibleHash<K, V>::GetNumBuckets() const {
-    return buckets_.size();
+    return bucket_number;
 }
 
 template <typename K, typename V>
@@ -201,6 +202,7 @@ SplitBucket(
             }
             bucket1->SetDepth(bucket_ptr->GetDepth() + 1);
             bucket2->SetDepth(bucket_ptr->GetDepth() + 1);
+            bucket_number++;
         }
     }
     size_t bucket_id = HashKey(key);
