@@ -18,7 +18,14 @@ namespace cmudb {
  */
 INDEX_TEMPLATE_ARGUMENTS
 void B_PLUS_TREE_INTERNAL_PAGE_TYPE::Init(page_id_t page_id,
-                                          page_id_t parent_id) {}
+                                          page_id_t parent_id) {
+    SetPageType(IndexPageType::INTERNAL_PAGE);
+    SetSize(0);
+    SetPageId(page_id);
+    SetParentPageId(parent_id);
+    SetMaxSize(0);
+
+}
 /*
  * Helper method to get/set the key associated with input "index"(a.k.a
  * array offset)
@@ -26,12 +33,14 @@ void B_PLUS_TREE_INTERNAL_PAGE_TYPE::Init(page_id_t page_id,
 INDEX_TEMPLATE_ARGUMENTS
 KeyType B_PLUS_TREE_INTERNAL_PAGE_TYPE::KeyAt(int index) const {
   // replace with your own code
-  KeyType key;
+  KeyType key = array[index];
   return key;
 }
 
 INDEX_TEMPLATE_ARGUMENTS
-void B_PLUS_TREE_INTERNAL_PAGE_TYPE::SetKeyAt(int index, const KeyType &key) {}
+void B_PLUS_TREE_INTERNAL_PAGE_TYPE::SetKeyAt(int index, const KeyType &key) {
+    array[index] = key;
+}
 
 /*
  * Helper method to find and return array index(or offset), so that its value
@@ -39,7 +48,13 @@ void B_PLUS_TREE_INTERNAL_PAGE_TYPE::SetKeyAt(int index, const KeyType &key) {}
  */
 INDEX_TEMPLATE_ARGUMENTS
 int B_PLUS_TREE_INTERNAL_PAGE_TYPE::ValueIndex(const ValueType &value) const {
-  return 0;
+    for (int i = 0; i < GetSize(); i++) {
+        ValueType current_value = array[i].second;
+        if (current_value == value) {
+            return i;
+        }
+    }
+  return -1;
 }
 
 /*
@@ -47,7 +62,9 @@ int B_PLUS_TREE_INTERNAL_PAGE_TYPE::ValueIndex(const ValueType &value) const {
  * offset)
  */
 INDEX_TEMPLATE_ARGUMENTS
-ValueType B_PLUS_TREE_INTERNAL_PAGE_TYPE::ValueAt(int index) const { return 0; }
+ValueType B_PLUS_TREE_INTERNAL_PAGE_TYPE::ValueAt(int index) const {
+    return array[index].second;
+}
 
 /*****************************************************************************
  * LOOKUP
@@ -61,6 +78,11 @@ INDEX_TEMPLATE_ARGUMENTS
 ValueType
 B_PLUS_TREE_INTERNAL_PAGE_TYPE::Lookup(const KeyType &key,
                                        const KeyComparator &comparator) const {
+    for (int i = 1; i < GetSize(); i++) {
+        if (comparator(key, array[i].first)) {
+            return array[i].second;
+        }
+    }
   return INVALID_PAGE_ID;
 }
 
