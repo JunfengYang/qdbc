@@ -3,6 +3,7 @@
  */
 
 #include <sstream>
+#include <include/page/b_plus_tree_internal_page.h>
 
 #include "common/exception.h"
 #include "common/rid.h"
@@ -124,6 +125,8 @@ void B_PLUS_TREE_LEAF_PAGE_TYPE::MoveHalfTo(
     recipient->CopyHalfFrom(
         &array[start_index], current_size - start_index);
     SetSize(start_index);
+    recipient->SetNextPageId(GetNextPageId());
+    SetNextPageId(recipient->GetPageId());
     buffer_pool_manager->UnpinPage(GetPageId(), true);
     buffer_pool_manager->UnpinPage(recipient->GetPageId(), true);
 }
@@ -170,7 +173,17 @@ bool B_PLUS_TREE_LEAF_PAGE_TYPE::Lookup(const KeyType &key, ValueType &value,
 INDEX_TEMPLATE_ARGUMENTS
 int B_PLUS_TREE_LEAF_PAGE_TYPE::RemoveAndDeleteRecord(
     const KeyType &key, const KeyComparator &comparator) {
-  return 0;
+    for(int i = 0; i < GetSize(); i++) {
+        if (0 == comparator(key, array[i].first)) {
+            if (i != (GetSize() - 1)) {
+                memmove(array + i, array + i + 1,
+                        (GetSize() - i - 1) * sizeof(MappingType));
+            }
+            SetSize(GetSize() - 1);
+            break;
+        }
+    }
+    return GetSize();
 }
 
 /*****************************************************************************
@@ -181,10 +194,29 @@ int B_PLUS_TREE_LEAF_PAGE_TYPE::RemoveAndDeleteRecord(
  * update next page id
  */
 INDEX_TEMPLATE_ARGUMENTS
-void B_PLUS_TREE_LEAF_PAGE_TYPE::MoveAllTo(BPlusTreeLeafPage *recipient,
-                                           int, BufferPoolManager *) {}
+void B_PLUS_TREE_LEAF_PAGE_TYPE::MoveAllTo(
+    BPlusTreeLeafPage *recipient, int index_in_parent,
+    BufferPoolManager * buffer_pool_manager) {
+    recipient->CopyAllFrom(array, GetSize());
+    recipient->SetNextPageId(GetNextPageId());
+    auto* page = buffer_pool_manager->FetchPage(GetParentPageId());
+    if (page == nullptr) {
+        throw Exception(EXCEPTION_TYPE_INDEX,
+                        "all page are pinned while printing");
+    }
+    auto *parrent_node = reinterpret_cast<BPlusTreeInternalPage *>(page->GetData());
+    parrent_node->Remove(index_in_parent);
+    buffer_pool_manager->UnpinPage(recipient->GetPageId(), true);
+}
 INDEX_TEMPLATE_ARGUMENTS
-void B_PLUS_TREE_LEAF_PAGE_TYPE::CopyAllFrom(MappingType *items, int size) {}
+void B_PLUS_TREE_LEAF_PAGE_TYPE::CopyAllFrom(MappingType *items, int size) {
+    auto start_index = GetSize();
+    for(int i = 0; i < size; i++) {
+        array[start_index + i] = std::move(*items);
+        items++;
+    }
+    SetSize(GetSize() + size);
+}
 
 /*****************************************************************************
  * REDISTRIBUTE
@@ -196,23 +228,65 @@ void B_PLUS_TREE_LEAF_PAGE_TYPE::CopyAllFrom(MappingType *items, int size) {}
 INDEX_TEMPLATE_ARGUMENTS
 void B_PLUS_TREE_LEAF_PAGE_TYPE::MoveFirstToEndOf(
     BPlusTreeLeafPage *recipient,
-    BufferPoolManager *buffer_pool_manager) {}
+    BufferPoolManager *buffer_pool_manager) {
+    recipient->CopyLastFrom(array[0]);
+    auto* page = buffer_pool_manager->FetchPage(GetParentPageId());
+    if (page == nullptr) {
+        throw Exception(EXCEPTION_TYPE_INDEX,
+                        "all page are pinned while printing");
+    }
+    auto *parrent_node = reinterpret_cast<BPlusTreeInternalPage *>(page->GetData());
+    auto parrent_index = parrent_node->ValueIndex(array[0].second);
+    if (parrent_index < 0) {
+        throw Exception(EXCEPTION_TYPE_INDEX,
+                        "old value not exists");
+    }
+    parrent_node->SetKeyAt(parrent_index, array[1].first);
+    for(int i = 0; i < GetSize() - 1; i++) {
+        array[i] = std::move(array[i + 1]);
+    }
+    SetSize(GetSize() - 1);
+    buffer_pool_manager->UnpinPage(GetPageId(), true);
+    buffer_pool_manager->UnpinPage(GetParentPageId(), true);
+    buffer_pool_manager->UnpinPage(recipient->GetPageId(), true);
+}
 
 INDEX_TEMPLATE_ARGUMENTS
-void B_PLUS_TREE_LEAF_PAGE_TYPE::CopyLastFrom(const MappingType &item) {}
+void B_PLUS_TREE_LEAF_PAGE_TYPE::CopyLastFrom(const MappingType &item) {
+    array[GetSize()] = std::move(item);
+    SetSize(GetSize() + 1);
+}
 /*
  * Remove the last key & value pair from this page to "recipient" page, then
  * update relavent key & value pair in its parent page.
  */
 INDEX_TEMPLATE_ARGUMENTS
 void B_PLUS_TREE_LEAF_PAGE_TYPE::MoveLastToFrontOf(
-    BPlusTreeLeafPage *recipient, int parentIndex,
-    BufferPoolManager *buffer_pool_manager) {}
+    BPlusTreeLeafPage *recipient, int parent_index,
+    BufferPoolManager *buffer_pool_manager) {
+    recipient->CopyFirstFrom(
+        array[GetSize() - 1], parent_index, buffer_pool_manager);
+    SetSize(GetSize() - 1);
+    buffer_pool_manager->UnpinPage(GetPageId(), true);
+    buffer_pool_manager->UnpinPage(recipient->GetPageId(), true);
+    buffer_pool_manager->UnpinPage(recipient->GetParentPageId(), true);
+}
 
 INDEX_TEMPLATE_ARGUMENTS
 void B_PLUS_TREE_LEAF_PAGE_TYPE::CopyFirstFrom(
-    const MappingType &item, int parentIndex,
-    BufferPoolManager *buffer_pool_manager) {}
+    const MappingType &item, int parent_index,
+    BufferPoolManager *buffer_pool_manager) {
+    memmove(array + 1, array, GetSize() * sizeof(MappingType));
+    array[0] = std::move(item);
+    SetSize(GetSize() + 1);
+    auto* page = buffer_pool_manager->FetchPage(GetParentPageId());
+    if (page == nullptr) {
+        throw Exception(EXCEPTION_TYPE_INDEX,
+                        "all page are pinned while printing");
+    }
+    auto *parrent_node = reinterpret_cast<BPlusTreeInternalPage *>(page->GetData());
+    parrent_node->SetKeyAt(parent_index, array[0].first);
+}
 
 /*****************************************************************************
  * DEBUG
