@@ -194,14 +194,17 @@ INDEX_TEMPLATE_ARGUMENTS
 void B_PLUS_TREE_INTERNAL_PAGE_TYPE::MoveAllTo(
     BPlusTreeInternalPage *recipient, int index_in_parent,
     BufferPoolManager *buffer_pool_manager) {
-    recipient->CopyAllFrom(&array[0], GetSize(), buffer_pool_manager);
     auto* page = buffer_pool_manager->FetchPage(GetParentPageId());
     if (page == nullptr) {
         throw Exception(EXCEPTION_TYPE_INDEX,
                         "all page are pinned while printing");
     }
     auto *parrent_node = reinterpret_cast<BPlusTreeInternalPage *>(page->GetData());
+    if (KeyAt(0) < recipient->KeyAt(0)) {
+        parrent_node->SetKeyAt(index_in_parent + 1, KeyAt(0));
+    }
     parrent_node->Remove(index_in_parent);
+    recipient->CopyAllFrom(&array[0], GetSize(), buffer_pool_manager);
     buffer_pool_manager->UnpinPage(GetPageId(), true);
     buffer_pool_manager->UnpinPage(GetParentPageId(), true);
 }
@@ -210,6 +213,10 @@ INDEX_TEMPLATE_ARGUMENTS
 void B_PLUS_TREE_INTERNAL_PAGE_TYPE::CopyAllFrom(
     MappingType *items, int size, BufferPoolManager *buffer_pool_manager) {
     auto start_index = GetSize();
+    if ((*items).first < KeyAt(0)) {
+        memmove(array + size + 1, array, GetSize() * sizeof(MappingType));
+        start_index = 0;
+    }
     for(int i = 0; i < size; i++) {
         array[start_index + i] = std::move(*items);
         items++;
