@@ -39,13 +39,15 @@ INDEX_TEMPLATE_ARGUMENTS
 bool BPLUSTREE_TYPE::GetValue(const KeyType &key,
                               std::vector<ValueType> &result,
                               Transaction *transaction) {
+    bool find = false;
     auto *leaf_node = FindLeafPage(key);
     ValueType value;
     if (leaf_node->Lookup(key, value, comparator_)) {
-      result.push_back(value);
-        return true;
+        result.push_back(value);
+        find =  true;
     }
-    return false;
+    buffer_pool_manager_->UnpinPage(leaf_node->GetPageId(), false);
+    return find;
 }
 
 /*****************************************************************************
@@ -104,11 +106,12 @@ bool BPLUSTREE_TYPE::InsertIntoLeaf(const KeyType &key, const ValueType &value,
     auto *leaf_node = FindLeafPage(key);
     ValueType old_value;
     if (leaf_node->Lookup(key, old_value, comparator_)) {
+        buffer_pool_manager_->UnpinPage(leaf_node->GetPageId(), true);
         return false;
     }
     leaf_node->Insert(key, value, comparator_);
     // If leaf node exceed max_size, split it.
-    if (leaf_node->GetSize() > leaf_node->GetMaxSize()) {
+    if (leaf_node->GetSize() >= leaf_node->GetMaxSize()) {
         auto* new_node = Split(leaf_node);
         InsertIntoParent(leaf_node, new_node->KeyAt(0), new_node);
         buffer_pool_manager_->UnpinPage(new_node->GetPageId(), true);
@@ -164,25 +167,26 @@ void BPLUSTREE_TYPE::InsertIntoParent(BPlusTreePage *old_node,
         old_node->SetParentPageId(new_root_id);
         new_node->SetParentPageId(new_root_id);
         root_page_id_ = new_root_id;
-        UpdateRootPageId(true);
+        UpdateRootPageId();
         new_root_node->PopulateNewRoot(
             old_node->GetPageId(), key,
             new_node->GetPageId());
         buffer_pool_manager_->UnpinPage(new_root_node->GetPageId(), true);
+    } else {
+        auto page_id = old_node->GetParentPageId();
+        auto parent_page = buffer_pool_manager_->FetchPage(page_id);
+        auto* parent_node = reinterpret_cast<BPLUSTREE_INTERNAL_NODE_TYPE *>(
+            parent_page->GetData());
+        parent_node->InsertNodeAfter(
+            old_node->GetPageId(), key, new_node->GetPageId());
+        if(parent_node->GetSize() >= parent_node->GetMaxSize()) {
+            auto* split_node = Split(parent_node);
+            InsertIntoParent(parent_node, split_node->KeyAt(0),
+                             split_node, transaction);
+            buffer_pool_manager_->UnpinPage(split_node->GetPageId(), true);
+        }
+        buffer_pool_manager_->UnpinPage(parent_node->GetPageId(), true);
     }
-    auto page_id = old_node->GetParentPageId();
-    auto parent_page = buffer_pool_manager_->FetchPage(page_id);
-    auto* parent_node = reinterpret_cast<BPLUSTREE_INTERNAL_NODE_TYPE *>(
-        parent_page->GetData());
-    parent_node->InsertNodeAfter(
-        old_node->GetPageId(), key, new_node->GetPageId());
-    if(parent_node->GetSize() > parent_node->GetMaxSize()) {
-        auto* split_node = Split(parent_node);
-        InsertIntoParent(parent_node, split_node->KeyAt(0),
-                         split_node, transaction);
-        buffer_pool_manager_->UnpinPage(split_node->GetPageId(), true);
-    }
-    buffer_pool_manager_->UnpinPage(parent_node->GetPageId(), true);
 }
 
 /*****************************************************************************
@@ -207,9 +211,10 @@ void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *transaction) {
             if (!buffer_pool_manager_->DeletePage(leaf_node->GetPageId())) {
                 throw Exception(EXCEPTION_TYPE_INDEX, "Page still in use.");
             }
-
+            return;
         }
     }
+    buffer_pool_manager_->UnpinPage(leaf_node->GetPageId(), false);
 }
 
 /*
@@ -242,7 +247,7 @@ bool BPLUSTREE_TYPE::CoalesceOrRedistribute(N *node, Transaction *transaction) {
     }
     buffer_pool_manager_->UnpinPage(parent_node->GetPageId(), false);
     sibling_node = reinterpret_cast<N *>(sibling_page->GetData());
-    if (sibling_node->GetSize() + node->GetSize() > node->GetMaxSize()) {
+    if (sibling_node->GetSize() + node->GetSize() >= node->GetMaxSize()) {
         Redistribute(sibling_node, node, index);
     } else {
         if (is_left_sibling) {

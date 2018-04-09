@@ -66,6 +66,8 @@ INDEXITERATOR_TYPE& INDEXITERATOR_TYPE::operator++() {
                     page->GetData());
                 current_position_ = 0;
             } else {
+                buffer_pool_manager_->UnpinPage(
+                    current_node_->GetPageId(), false);
                 current_node_ = nullptr;
             }
         } else {
@@ -76,7 +78,8 @@ INDEXITERATOR_TYPE& INDEXITERATOR_TYPE::operator++() {
 }
 
 INDEX_TEMPLATE_ARGUMENTS
-INDEXITERATOR_TYPE::~IndexIterator() {}
+INDEXITERATOR_TYPE::~IndexIterator() {
+}
 
 template class IndexIterator<GenericKey<4>, RID, GenericComparator<4>>;
 template class IndexIterator<GenericKey<8>, RID, GenericComparator<8>>;

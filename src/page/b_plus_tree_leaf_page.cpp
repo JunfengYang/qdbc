@@ -212,6 +212,7 @@ void B_PLUS_TREE_LEAF_PAGE_TYPE::MoveAllTo(
     parrent_node->Remove(index_in_parent);
     recipient->CopyAllFrom(array, GetSize());
     recipient->SetNextPageId(GetNextPageId());
+    buffer_pool_manager->UnpinPage(GetParentPageId(), true);
 }
 INDEX_TEMPLATE_ARGUMENTS
 void B_PLUS_TREE_LEAF_PAGE_TYPE::CopyAllFrom(MappingType *items, int size) {
@@ -286,6 +287,7 @@ void B_PLUS_TREE_LEAF_PAGE_TYPE::CopyFirstFrom(
     }
     auto *parrent_node = reinterpret_cast<BPLUSTREE_INTERNAL_NODE_TYPE *>(page->GetData());
     parrent_node->SetKeyAt(parent_index, array[0].first);
+    buffer_pool_manager->UnpinPage(GetParentPageId(), true);
 }
 
 /*****************************************************************************
