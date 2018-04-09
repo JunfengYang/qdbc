@@ -230,6 +230,7 @@ bool BPLUSTREE_TYPE::CoalesceOrRedistribute(N *node, Transaction *transaction) {
     if (node->IsRootPage()) {
         return AdjustRoot(node);
     }
+    bool node_delete = false;
     auto parent_page = buffer_pool_manager_->FetchPage(node->GetParentPageId());
     auto* parent_node = reinterpret_cast<BPLUSTREE_INTERNAL_NODE_TYPE *>(
         parent_page->GetData());
@@ -245,26 +246,29 @@ bool BPLUSTREE_TYPE::CoalesceOrRedistribute(N *node, Transaction *transaction) {
         sibling_page = buffer_pool_manager_->FetchPage(
             parent_node->ValueAt(index - 1));
     }
-    buffer_pool_manager_->UnpinPage(parent_node->GetPageId(), false);
     sibling_node = reinterpret_cast<N *>(sibling_page->GetData());
     if (sibling_node->GetSize() + node->GetSize() >= node->GetMaxSize()) {
         Redistribute(sibling_node, node, index);
+        buffer_pool_manager_->UnpinPage(sibling_node->GetPageId(), false);
+        buffer_pool_manager_->UnpinPage(parent_node->GetPageId(), false);
     } else {
         if (is_left_sibling) {
             if (Coalesce(sibling_node, node, parent_node, index, transaction)) {
+                buffer_pool_manager_->UnpinPage(parent_node->GetPageId(), false);
                 buffer_pool_manager_->DeletePage(parent_node->GetPageId());
             }
-        } else if (Coalesce(node, sibling_node, parent_node, index, transaction)) {
-            buffer_pool_manager_->DeletePage(parent_node->GetPageId());
-        } else {
+            node_delete = true;
             buffer_pool_manager_->UnpinPage(sibling_node->GetPageId(), false);
-            return false;
+        } else {
+            if (Coalesce(node, sibling_node, parent_node, index + 1, transaction)) {
+                buffer_pool_manager_->UnpinPage(parent_node->GetPageId(), false);
+                buffer_pool_manager_->DeletePage(parent_node->GetPageId());
+            }
+            buffer_pool_manager_->UnpinPage(sibling_node->GetPageId(), false);
+            buffer_pool_manager_->DeletePage(sibling_node->GetPageId());
         }
-        buffer_pool_manager_->UnpinPage(sibling_node->GetPageId(), false);
-        return true;
     }
-    buffer_pool_manager_->UnpinPage(sibling_node->GetPageId(), false);
-    return false;
+    return node_delete;
 }
 
 /*

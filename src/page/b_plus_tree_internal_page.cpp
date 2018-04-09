@@ -243,7 +243,7 @@ void B_PLUS_TREE_INTERNAL_PAGE_TYPE::MoveFirstToEndOf(
                         "all page are pinned while printing");
     }
     auto *parrent_node = reinterpret_cast<BPlusTreeInternalPage *>(page->GetData());
-    auto parrent_index = parrent_node->ValueIndex(array[0].second);
+    auto parrent_index = parrent_node->ValueIndex(GetPageId());
     if (parrent_index < 0) {
         throw Exception(EXCEPTION_TYPE_INDEX, "old value not exists");
     }

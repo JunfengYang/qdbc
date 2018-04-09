@@ -360,7 +360,7 @@ TEST(BPlusTreeTests, ScaleTest) {
   }
   EXPECT_EQ(current_key, keys.size() + 1);
 
-  int64_t remove_scale = 9900;
+  int64_t remove_scale = 9406;
   std::vector<int64_t> remove_keys;
   for (int64_t key = 1; key < remove_scale; key++) {
     remove_keys.push_back(key);
@@ -368,8 +368,20 @@ TEST(BPlusTreeTests, ScaleTest) {
   // std::random_shuffle(remove_keys.begin(), remove_keys.end());
   for (auto key : remove_keys) {
     index_key.SetFromInteger(key);
+    if (key == 9406) {
+      std::cout << key << std::endl;
+    }
     tree.Remove(index_key, transaction);
   }
+  int64_t count = 0;
+  for (auto iterator = tree.Begin(); iterator.isEnd() == false;
+       ++iterator) {
+    count++;
+    auto location = (*iterator).second;
+    EXPECT_EQ(location.GetSlotNum(), 1);
+  }
+
+  EXPECT_EQ(count, 100);
 
   start_key = 9900;
   current_key = start_key;
