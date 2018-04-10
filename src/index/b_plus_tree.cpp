@@ -167,10 +167,10 @@ void BPLUSTREE_TYPE::InsertIntoParent(BPlusTreePage *old_node,
         old_node->SetParentPageId(new_root_id);
         new_node->SetParentPageId(new_root_id);
         root_page_id_ = new_root_id;
-        UpdateRootPageId();
         new_root_node->PopulateNewRoot(
             old_node->GetPageId(), key,
             new_node->GetPageId());
+        UpdateRootPageId();
         buffer_pool_manager_->UnpinPage(new_root_node->GetPageId(), true);
     } else {
         auto page_id = old_node->GetParentPageId();
@@ -205,17 +205,6 @@ void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *transaction) {
         return;
     }
     auto* leaf_node = FindLeafPage(key);
-//    if (leaf_node->GetPageId() == 10) {
-//        for (int64_t count = 0; count < leaf_node->GetSize(); ++count) {
-//            auto location = leaf_node->GetItem(count);
-//            if (location.second.GetSlotNum() == 122) {
-//                std::cout << "";
-//            }
-//            std::cout << location.second.GetSlotNum() << " ";
-//        }
-//        std::cout << " start" << std::endl;
-//        std::cout << "";
-//    }
     if (leaf_node->RemoveAndDeleteRecord(key, comparator_) < leaf_node->GetMinSize()) {
         if (CoalesceOrRedistribute(leaf_node, transaction)) {
             buffer_pool_manager_->UnpinPage(leaf_node->GetPageId(), true);
@@ -225,14 +214,6 @@ void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *transaction) {
             return;
         }
     }
-//    if (leaf_node->GetPageId() == 10) {
-//        for (int64_t count = 0; count < leaf_node->GetSize(); ++count) {
-//            auto location = leaf_node->GetItem(count);
-//            std::cout << location.second.GetSlotNum() << " ";
-//        }
-//        std::cout << " end" << std::endl;
-//        std::cout << "";
-//    }
     buffer_pool_manager_->UnpinPage(leaf_node->GetPageId(), true);
 }
 
@@ -268,19 +249,19 @@ bool BPLUSTREE_TYPE::CoalesceOrRedistribute(N *node, Transaction *transaction) {
     sibling_node = reinterpret_cast<N *>(sibling_page->GetData());
     if (sibling_node->GetSize() + node->GetSize() >= node->GetMaxSize()) {
         Redistribute(sibling_node, node, index);
-        buffer_pool_manager_->UnpinPage(sibling_node->GetPageId(), false);
+        buffer_pool_manager_->UnpinPage(sibling_node->GetPageId(), true);
         buffer_pool_manager_->UnpinPage(parent_node->GetPageId(), false);
     } else {
         if (is_left_sibling) {
             if (Coalesce(sibling_node, node, parent_node, index, transaction)) {
-                buffer_pool_manager_->UnpinPage(parent_node->GetPageId(), false);
+                buffer_pool_manager_->UnpinPage(parent_node->GetPageId(), true);
                 buffer_pool_manager_->DeletePage(parent_node->GetPageId());
             }
             node_delete = true;
-            buffer_pool_manager_->UnpinPage(sibling_node->GetPageId(), false);
+            buffer_pool_manager_->UnpinPage(sibling_node->GetPageId(), true);
         } else {
             if (Coalesce(node, sibling_node, parent_node, index + 1, transaction)) {
-                buffer_pool_manager_->UnpinPage(parent_node->GetPageId(), false);
+                buffer_pool_manager_->UnpinPage(parent_node->GetPageId(), true);
                 buffer_pool_manager_->DeletePage(parent_node->GetPageId());
             }
             buffer_pool_manager_->UnpinPage(sibling_node->GetPageId(), false);
@@ -352,6 +333,10 @@ bool BPLUSTREE_TYPE::AdjustRoot(BPlusTreePage *old_root_node) {
             auto* parent_node = reinterpret_cast<BPLUSTREE_INTERNAL_NODE_TYPE *>(
                 old_root_node);
             root_page_id_ = parent_node->RemoveAndReturnOnlyChild();
+            auto* new_root_page = buffer_pool_manager_->FetchPage(root_page_id_);
+            auto* new_root_node = reinterpret_cast<BPlusTreePage *>(new_root_page->GetData());
+            new_root_node->SetParentPageId(INVALID_PAGE_ID);
+            buffer_pool_manager_->UnpinPage(root_page_id_, true);
             UpdateRootPageId();
             return true;
         }

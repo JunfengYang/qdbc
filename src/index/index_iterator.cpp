@@ -60,9 +60,6 @@ INDEXITERATOR_TYPE& INDEXITERATOR_TYPE::operator++() {
             if (current_node_->GetNextPageId() != INVALID_PAGE_ID) {
                 auto* page = buffer_pool_manager_->FetchPage(
                     current_node_->GetNextPageId());
-                if (current_node_->GetPageId() == 14) {
-                    std::cout << 14 << std::endl;
-                }
                 buffer_pool_manager_->UnpinPage(
                     current_node_->GetPageId(), false);
                 current_node_ = reinterpret_cast<B_PLUS_TREE_LEAF_PAGE_TYPE *>(

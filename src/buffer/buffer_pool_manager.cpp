@@ -50,9 +50,6 @@ Page *BufferPoolManager::FetchPage(page_id_t page_id) {
     if (page_id == INVALID_PAGE_ID) {
         return nullptr;
     }
-    if (page_id == 63) {
-        std::cout << page_id << std::endl;
-    }
     Page *page = nullptr;
     if (page_table_->Find(page_id, page)) {
         page->pin_count_++;
