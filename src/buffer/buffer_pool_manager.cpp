@@ -53,6 +53,7 @@ Page *BufferPoolManager::FetchPage(page_id_t page_id) {
     Page *page = nullptr;
     if (page_table_->Find(page_id, page)) {
         page->pin_count_++;
+        replacer_->Erase(page);
         return page;
     }
     std::unique_lock<std::mutex> list_latch(latch_, std::defer_lock);
@@ -67,6 +68,7 @@ Page *BufferPoolManager::FetchPage(page_id_t page_id) {
     }
     list_latch.unlock();
     page_table_->Remove(page->page_id_);
+    replacer_->Erase(page);
     page->WLatch();
     if (page->is_dirty_) {
         disk_manager_->WritePage(page->page_id_, page->data_);
@@ -148,6 +150,7 @@ bool BufferPoolManager::DeletePage(page_id_t page_id) {
         std::unique_lock<std::mutex> list_latch(latch_, std::defer_lock);
         list_latch.lock();
         free_list_->push_back(page);
+        replacer_->Erase(page);
         list_latch.unlock();
         page->WUnlatch();
         disk_manager_->DeallocatePage(page_id);

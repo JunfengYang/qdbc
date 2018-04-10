@@ -94,7 +94,6 @@ TEST(BptTreeTest, UnitTest) {
            ++iterator)
         std::cout << "key is " << (*iterator).first << " value is "
                   << (*iterator).second << '\n';
-
       break;
     case 'v':
       verbose = !verbose;
