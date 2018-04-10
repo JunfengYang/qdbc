@@ -360,28 +360,30 @@ TEST(BPlusTreeTests, ScaleTest) {
   }
   EXPECT_EQ(current_key, keys.size() + 1);
 
-  int64_t remove_scale = 9406;
+  int64_t remove_scale = 1000;
   std::vector<int64_t> remove_keys;
   for (int64_t key = 1; key < remove_scale; key++) {
     remove_keys.push_back(key);
   }
-  // std::random_shuffle(remove_keys.begin(), remove_keys.end());
+   std::random_shuffle(remove_keys.begin(), remove_keys.end());
+  int64_t remove_count = 0;
   for (auto key : remove_keys) {
     index_key.SetFromInteger(key);
-    if (key == 9406) {
-      std::cout << key << std::endl;
+    if (key == 122) {
+        std::cout << key << std::endl;
     }
     tree.Remove(index_key, transaction);
+    remove_count++;
   }
   int64_t count = 0;
   for (auto iterator = tree.Begin(); iterator.isEnd() == false;
        ++iterator) {
     count++;
-    auto location = (*iterator).second;
-    EXPECT_EQ(location.GetSlotNum(), 1);
+//    auto location = (*iterator).second;
+//    std::cout << location.GetSlotNum() <<std::endl;
   }
-
-  EXPECT_EQ(count, 100);
+  int64_t should_remain = 9999 - remove_count;
+  EXPECT_EQ(count, should_remain);
 
   start_key = 9900;
   current_key = start_key;

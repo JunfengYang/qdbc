@@ -211,7 +211,6 @@ void B_PLUS_TREE_INTERNAL_PAGE_TYPE::CopyAllFrom(
     MappingType *items, int size, BufferPoolManager *buffer_pool_manager) {
     auto start_index = GetSize();
     for(int i = 0; i < size; i++) {
-        array[start_index + i] = std::move(*items);
         auto* page = buffer_pool_manager->FetchPage(items->second);
         if (page == nullptr) {
             throw Exception(EXCEPTION_TYPE_INDEX,
@@ -220,6 +219,7 @@ void B_PLUS_TREE_INTERNAL_PAGE_TYPE::CopyAllFrom(
         auto* node = reinterpret_cast<BPlusTreePage *>(page->GetData());
         node->SetParentPageId(GetPageId());
         buffer_pool_manager->UnpinPage(items->second, true);
+        array[start_index + i] = std::move(*items);
         items++;
     }
     SetSize(GetSize() + size);

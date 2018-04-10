@@ -205,16 +205,35 @@ void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *transaction) {
         return;
     }
     auto* leaf_node = FindLeafPage(key);
+//    if (leaf_node->GetPageId() == 10) {
+//        for (int64_t count = 0; count < leaf_node->GetSize(); ++count) {
+//            auto location = leaf_node->GetItem(count);
+//            if (location.second.GetSlotNum() == 122) {
+//                std::cout << "";
+//            }
+//            std::cout << location.second.GetSlotNum() << " ";
+//        }
+//        std::cout << " start" << std::endl;
+//        std::cout << "";
+//    }
     if (leaf_node->RemoveAndDeleteRecord(key, comparator_) < leaf_node->GetMinSize()) {
         if (CoalesceOrRedistribute(leaf_node, transaction)) {
-            buffer_pool_manager_->UnpinPage(leaf_node->GetPageId(), false);
+            buffer_pool_manager_->UnpinPage(leaf_node->GetPageId(), true);
             if (!buffer_pool_manager_->DeletePage(leaf_node->GetPageId())) {
                 throw Exception(EXCEPTION_TYPE_INDEX, "Page still in use.");
             }
             return;
         }
     }
-    buffer_pool_manager_->UnpinPage(leaf_node->GetPageId(), false);
+//    if (leaf_node->GetPageId() == 10) {
+//        for (int64_t count = 0; count < leaf_node->GetSize(); ++count) {
+//            auto location = leaf_node->GetItem(count);
+//            std::cout << location.second.GetSlotNum() << " ";
+//        }
+//        std::cout << " end" << std::endl;
+//        std::cout << "";
+//    }
+    buffer_pool_manager_->UnpinPage(leaf_node->GetPageId(), true);
 }
 
 /*
