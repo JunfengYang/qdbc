@@ -24,7 +24,7 @@ class WaitList {
     WaitList(const WaitState &) = delete;
     WaitList &operator=(const WaitList &) = delete;
     WaitList(Transaction * txn, WaitState target) : state(target) {
-      granted.insert(txn);
+      granted.push_back(txn);
     }
 
     class WaitItem {
