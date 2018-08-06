@@ -356,6 +356,8 @@ TEST(BPlusTreeTests, ScaleTest) {
   index_key.SetFromInteger(start_key);
   for (auto iterator = tree.Begin(index_key); iterator.isEnd() == false;
        ++iterator) {
+    auto location = (*iterator).second;
+    EXPECT_EQ(current_key, location.GetSlotNum());
     current_key = current_key + 1;
   }
   EXPECT_EQ(current_key, keys.size() + 1);

@@ -47,6 +47,7 @@ BufferPoolManager::~BufferPoolManager() {
  * pointer
  */
 Page *BufferPoolManager::FetchPage(page_id_t page_id) {
+    std::lock_guard<std::mutex> guard(latch_);
     if (page_id == INVALID_PAGE_ID) {
         return nullptr;
     }
@@ -56,8 +57,6 @@ Page *BufferPoolManager::FetchPage(page_id_t page_id) {
         replacer_->Erase(page);
         return page;
     }
-    std::unique_lock<std::mutex> list_latch(latch_, std::defer_lock);
-    list_latch.lock();
     if (free_list_->empty()) {
         if (!replacer_->Victim(page)) {
             return nullptr;
@@ -66,10 +65,8 @@ Page *BufferPoolManager::FetchPage(page_id_t page_id) {
         page = free_list_->back();
         free_list_->pop_back();
     }
-    list_latch.unlock();
     page_table_->Remove(page->page_id_);
     replacer_->Erase(page);
-    page->WLatch();
     if (page->is_dirty_) {
         disk_manager_->WritePage(page->page_id_, page->data_);
     }
@@ -78,7 +75,6 @@ Page *BufferPoolManager::FetchPage(page_id_t page_id) {
     page->is_dirty_ = false;
     page->page_id_ = page_id;
     disk_manager_->ReadPage(page_id, page->data_);
-    page->WUnlatch();
     page_table_->Insert(page->page_id_, page);
     return page;
 }
@@ -90,9 +86,9 @@ Page *BufferPoolManager::FetchPage(page_id_t page_id) {
  * dirty flag of this page
  */
 bool BufferPoolManager::UnpinPage(page_id_t page_id, bool is_dirty) {
+    std::lock_guard<std::mutex> guard(latch_);
     Page *page = nullptr;
     if (page_table_->Find(page_id, page)) {
-        page->WLatch();
         if (page->pin_count_ > 0) {
             page->pin_count_--;
             if (page->pin_count_ == 0) {
@@ -101,10 +97,8 @@ bool BufferPoolManager::UnpinPage(page_id_t page_id, bool is_dirty) {
             if (is_dirty) {
                 page->is_dirty_ = is_dirty;
             }
-            page->WUnlatch();
             return true;
         }
-        page->WUnlatch();
     }
     return false;
 }
@@ -116,6 +110,7 @@ bool BufferPoolManager::UnpinPage(page_id_t page_id, bool is_dirty) {
  * NOTE: make sure page_id != INVALID_PAGE_ID
  */
 bool BufferPoolManager::FlushPage(page_id_t page_id) {
+    std::lock_guard<std::mutex> guard(latch_);
     if (page_id != INVALID_PAGE_ID) {
         Page *page = nullptr;
         if (page_table_->Find(page_id, page)) {
@@ -136,23 +131,19 @@ bool BufferPoolManager::FlushPage(page_id_t page_id) {
  * the page is found within page table, but pin_count != 0, return false
  */
 bool BufferPoolManager::DeletePage(page_id_t page_id) {
+    std::lock_guard<std::mutex> guard(latch_);
     Page *page = nullptr;
     if (page_table_->Find(page_id, page)) {
         if (page->pin_count_ > 0) {
             return false;
         }
         page_table_->Remove(page->page_id_);
-        page->WLatch();
         page->ResetMemory();
         page->page_id_ = INVALID_PAGE_ID;
         page->pin_count_ = 0;
         page->is_dirty_ = false;
-        std::unique_lock<std::mutex> list_latch(latch_, std::defer_lock);
-        list_latch.lock();
         free_list_->push_back(page);
         replacer_->Erase(page);
-        list_latch.unlock();
-        page->WUnlatch();
         disk_manager_->DeallocatePage(page_id);
         return true;
     }
@@ -168,10 +159,9 @@ bool BufferPoolManager::DeletePage(page_id_t page_id) {
  * into page table. return nullptr if all the pages in pool are pinned
  */
 Page *BufferPoolManager::NewPage(page_id_t &page_id) {
+    std::lock_guard<std::mutex> guard(latch_);
     page_id = disk_manager_->AllocatePage();
     Page *page = nullptr;
-    std::unique_lock<std::mutex> list_latch(latch_, std::defer_lock);
-    list_latch.lock();
     if (free_list_->empty()) {
         if (!replacer_->Victim(page)) {
             return nullptr;
@@ -180,9 +170,7 @@ Page *BufferPoolManager::NewPage(page_id_t &page_id) {
         page = free_list_->back();
         free_list_->pop_back();
     }
-    list_latch.unlock();
     page_table_->Remove(page->page_id_);
-    page->WLatch();
     if (page->is_dirty_) {
         disk_manager_->WritePage(page->page_id_, page->data_);
     }
@@ -190,7 +178,6 @@ Page *BufferPoolManager::NewPage(page_id_t &page_id) {
     page->ResetMemory();
     page->pin_count_ = 1;
     page->is_dirty_ = false;
-    page->WUnlatch();
     page_table_->Insert(page->page_id_, page);
     return page;
 }

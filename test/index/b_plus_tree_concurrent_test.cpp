@@ -140,6 +140,10 @@ TEST(BPlusTreeConcurrentTest, InsertTest1) {
   for (auto iterator = tree.Begin(index_key); iterator.isEnd() == false;
        ++iterator) {
     auto location = (*iterator).second;
+    if (location.GetSlotNum() != current_key) {
+      auto key = (*iterator).first.ToString();
+      EXPECT_EQ(key, current_key);
+    }
     EXPECT_EQ(location.GetPageId(), 0);
     EXPECT_EQ(location.GetSlotNum(), current_key);
     current_key = current_key + 1;

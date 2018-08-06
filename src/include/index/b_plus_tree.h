@@ -12,6 +12,7 @@
 
 #include <queue>
 #include <vector>
+#include <mutex>
 
 #include "concurrency/transaction.h"
 #include "index/index_iterator.h"
@@ -19,6 +20,8 @@
 #include "page/b_plus_tree_leaf_page.h"
 
 namespace cmudb {
+
+enum class BTreeOper { SEARCH = 0, INSERTION, REMOVE };
 
 #define BPLUSTREE_TYPE BPlusTree<KeyType, ValueType, KeyComparator>
 // Main class providing the API for the Interactive B+ Tree.
@@ -60,6 +63,8 @@ public:
                       Transaction *transaction = nullptr);
   // expose for test purpose
   B_PLUS_TREE_LEAF_PAGE_TYPE *FindLeafPage(const KeyType &key,
+                                           Transaction *transaction,
+                                           BTreeOper bTreeOper,
                                            bool leftMost = false);
 
 private:
@@ -89,11 +94,78 @@ private:
 
   void UpdateRootPageId(int insert_record = false);
 
+  void LockPageForOperation(Page *page, BTreeOper bTreeOper) {
+    switch (bTreeOper) {
+      case BTreeOper::SEARCH:
+        page->RLatch();
+        break;
+      default:
+        page->WLatch();
+        break;
+    }
+  }
+
+  void UnLockPageForOperation(Page *page, BTreeOper bTreeOper) {
+    switch (bTreeOper) {
+      case BTreeOper::SEARCH:
+        page->RUnlatch();
+            break;
+      default:
+        page->WUnlatch();
+            break;
+    }
+  }
+
+  void ReleaseTransactionLocks(Transaction *transaction, BTreeOper bTreeOper,
+                               bool isDirty = false) {
+    assert(transaction);
+    while (!transaction->GetPageSet()->empty()) {
+      Page *toUnlock = transaction->GetPageSet()->front();
+      UnLockPageForOperation(toUnlock, bTreeOper);
+      transaction->GetPageSet()->pop_front();
+      buffer_pool_manager_->UnpinPage(toUnlock->GetPageId(), isDirty);
+    }
+    if (bTreeOper == BTreeOper::REMOVE) {
+      std::unordered_set<page_id_t> & ref = *transaction->GetDeletedPageSet();
+      for(auto iter = ref.begin(); iter !=ref.end(); iter++){
+        Page* page = buffer_pool_manager_->FetchPage(*iter);
+        page->WUnlatch();
+        buffer_pool_manager_->UnpinPage(*iter, false);//unpin page
+        buffer_pool_manager_->DeletePage(*iter);//do delete
+      }
+      ref.clear();
+    }
+  }
+
+  void ReleaseSafeAncestorsLocks(Transaction *transaction, BTreeOper bTreeOper, Page *page) {
+    auto *node = reinterpret_cast<BPLUSTREE_INTERNAL_NODE_TYPE *>(page->GetData());
+    switch (bTreeOper) {
+      case BTreeOper::SEARCH:
+        // Release ancestors locks.
+        break;
+      case BTreeOper::INSERTION:
+        if (node->GetSize() >= node->GetMaxSize() - 1) {
+          return;
+        }
+        // Safe to release ancestors locks.
+        break;
+      case BTreeOper::REMOVE:
+        if (node->GetSize() <= node->GetMinSize()) {
+          return;
+        }
+        // Safe to release ancestors locks.
+        break;
+    }
+    ReleaseTransactionLocks(transaction, bTreeOper);
+  }
+
   // member variable
   std::string index_name_;
   page_id_t root_page_id_;
   BufferPoolManager *buffer_pool_manager_;
   KeyComparator comparator_;
+
+  mutable std::mutex btree_latch;
 };
 
 } // namespace cmudb
