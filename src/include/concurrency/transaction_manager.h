@@ -23,6 +23,9 @@ public:
   void Abort(Transaction *txn);
 
 private:
+  void AddLog(Transaction *txn, LogRecordType recordType);
+  void AddLogBlockUntilSuccess(Transaction *txn, LogRecordType recordType);
+
   std::atomic<txn_id_t> next_txn_id_;
   LockManager *lock_manager_;
   LogManager *log_manager_;

@@ -61,6 +61,7 @@ Page *BufferPoolManager::FetchPage(page_id_t page_id) {
         if (!replacer_->Victim(page)) {
             return nullptr;
         }
+        assert(page->pin_count_ == 0);
     } else {
         page = free_list_->back();
         free_list_->pop_back();
@@ -68,6 +69,12 @@ Page *BufferPoolManager::FetchPage(page_id_t page_id) {
     page_table_->Remove(page->page_id_);
     replacer_->Erase(page);
     if (page->is_dirty_) {
+        // The page is get victim page from replacer.
+        while (page->GetLSN() > log_manager_->GetPersistentLSN()) {
+            // must make sure the page's current lsn log is flushed into disk.
+            log_manager_->TriggerFlush();
+            log_manager_->WaitUntilBgTaskFinish();
+        }
         disk_manager_->WritePage(page->page_id_, page->data_);
     }
     page->ResetMemory();

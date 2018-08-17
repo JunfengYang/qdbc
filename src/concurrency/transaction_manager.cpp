@@ -8,11 +8,24 @@
 #include <cassert>
 namespace cmudb {
 
+void TransactionManager::AddLog(Transaction *txn, LogRecordType recordType) {
+    LogRecord record(txn->GetTransactionId(), txn->GetPrevLSN(), recordType);
+    log_manager_->AppendLogRecord(record);
+    txn->SetPrevLSN(record.GetLSN());
+}
+
+void TransactionManager::AddLogBlockUntilSuccess(Transaction *txn,
+                                                 LogRecordType recordType) {
+    AddLog(txn, recordType);
+    log_manager_->WaitUntilBgTaskFinish();
+}
+
 Transaction *TransactionManager::Begin() {
   Transaction *txn = new Transaction(next_txn_id_++);
 
   if (ENABLE_LOGGING) {
-    // TODO: write log and update transaction's prev_lsn here
+    // write log and update transaction's prev_lsn here
+      AddLog(txn, LogRecordType::BEGIN);
   }
 
   return txn;
@@ -34,7 +47,8 @@ void TransactionManager::Commit(Transaction *txn) {
   write_set->clear();
 
   if (ENABLE_LOGGING) {
-    // TODO: write log and update transaction's prev_lsn here
+    // write log and update transaction's prev_lsn here
+      AddLogBlockUntilSuccess(txn, LogRecordType::COMMIT);
   }
 
   // release all the lock
@@ -71,7 +85,8 @@ void TransactionManager::Abort(Transaction *txn) {
   write_set->clear();
 
   if (ENABLE_LOGGING) {
-    // TODO: write log and update transaction's prev_lsn here
+    // write log and update transaction's prev_lsn here
+      AddLogBlockUntilSuccess(txn, LogRecordType::ABORT);
   }
 
   // release all the lock
